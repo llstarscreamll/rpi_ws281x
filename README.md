@@ -233,3 +233,30 @@ it out on the MISO pin.
 Make sure to hook a signal handler for SIGKILL to do cleanup.  From the
 handler make sure to call `ws2811_fini()`.  It'll make sure that the DMA
 is finished before program execution stops and cleans up after itself.
+
+## Setup for Raspberry PI 5
+
+Install tools:
+
+```sh
+sudo apt install -y cmake make linux-headers device-tree-compiler raspi-utils
+```
+
+Compile:
+
+```sh
+cd rp1_ws281x_pwm
+make
+./dts.sh
+sudo insmod ./rp1_ws281x_pwm.ko pwm_channel=2
+sudo dtoverlay -d . rp1_ws281x_pwm
+sudo pinctrl set 18 a3 pn
+```
+
+Test from the project root folder:
+
+```sh
+cmake .
+make
+sudo ./test
+```
