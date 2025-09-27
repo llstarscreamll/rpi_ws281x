@@ -36,6 +36,7 @@
 
 
 #define RP1_WS281X_PWM_DRIVER_VERSION            0x00000100
+#define SG_CHUNK_SIZE                            1024
 
 //
 // PWM Hardware Register Structures
@@ -126,7 +127,7 @@ static int pwm_channel = 2;
 //
 // PWM Channel Setup
 //
-void rp1_ws281x_pwm_chan(int channel, int invert) {
+static void rp1_ws281x_pwm_chan(int channel, int invert) {
     uint32_t tmp;
 
     tmp = RP1_PWM_REGS_CHAN_CTRL_MODE_MSBS |
@@ -144,7 +145,7 @@ void rp1_ws281x_pwm_chan(int channel, int invert) {
 //
 // PWM Controller Setup
 //
-void rp1_ws281x_pwm_init(int channel, int invert) {
+static void rp1_ws281x_pwm_init(int channel, int invert) {
     rp1_ws281x_pwm_chan(channel, invert);
 
     // Set the range to 32-bits since we're sending data through
@@ -164,7 +165,7 @@ void rp1_ws281x_pwm_init(int channel, int invert) {
     iowrite32(0, &rp1_ws281x_pwm.regs->duty_fifo);
 }
 
-void rp1_ws281x_pwm_cleanup(void) {
+static void rp1_ws281x_pwm_cleanup(void) {
     // Set level back to zero
     iowrite32(0, &rp1_ws281x_pwm.regs->duty_fifo);
 
@@ -176,7 +177,7 @@ void rp1_ws281x_pwm_cleanup(void) {
 //
 // Character device file operations
 //
-int rp1_ws281x_pwm_open(struct inode *inode, struct file *file) {
+static int rp1_ws281x_pwm_open(struct inode *inode, struct file *file) {
     if (mutex_lock_interruptible(rp1_ws281x_pwm.lock)) {
         return -EINTR;
     }
@@ -197,7 +198,7 @@ int rp1_ws281x_pwm_open(struct inode *inode, struct file *file) {
     return 0;
 }
 
-int rp1_ws281x_pwm_release(struct inode *inode, struct file *file) {
+static int rp1_ws281x_pwm_release(struct inode *inode, struct file *file) {
     int retval;
 
     if (mutex_lock_interruptible(rp1_ws281x_pwm.lock)) {
@@ -217,7 +218,7 @@ int rp1_ws281x_pwm_release(struct inode *inode, struct file *file) {
     return 0;
 }
 
-long rp1_ws281x_pwm_ioctl(struct file *file, unsigned int cmd, unsigned long arg) {
+static long rp1_ws281x_pwm_ioctl(struct file *file, unsigned int cmd, unsigned long arg) {
     uint32_t ver = RP1_WS281X_PWM_DRIVER_VERSION;
     rp1_ws281x_pwm_ioctl_reg_t reg;
 
@@ -267,12 +268,12 @@ long rp1_ws281x_pwm_ioctl(struct file *file, unsigned int cmd, unsigned long arg
     return 0;
 }
 
-void rp1_ws281x_dma_callback(void *param) {
+static void rp1_ws281x_dma_callback(void *param) {
     rp1_ws281x_pwm.active &= ~RP1_WS281X_PWM_DEVICE_ACTIVE;
     wake_up(rp1_ws281x_pwm.wq);
 }
 
-ssize_t rp1_ws281x_dma(const char *buf, ssize_t len) {
+static ssize_t rp1_ws281x_dma(const char *buf, ssize_t len) {
     uint64_t first = (uint64_t)buf >> PAGE_SHIFT;
     uint64_t last = ((uint64_t)buf + (len - 1)) >> PAGE_SHIFT;
     int offset = (uint64_t)buf % PAGE_SIZE;
@@ -349,7 +350,7 @@ cleanup:
     return len;
 }
 
-ssize_t rp1_ws281x_pwm_write(struct file *file, const char *buf, size_t total, loff_t *loff) {
+static ssize_t rp1_ws281x_pwm_write(struct file *file, const char *buf, size_t total, loff_t *loff) {
     ssize_t len = 0;
 
     if (mutex_lock_interruptible(rp1_ws281x_pwm.lock)) {
@@ -384,7 +385,7 @@ static struct file_operations rp1_ws281x_pwm_fops = {
 /*
  * Driver Probe / Init
  */
-int rp1_ws281x_pwm_probe(struct platform_device *pdev) {
+static int rp1_ws281x_pwm_probe(struct platform_device *pdev) {
     struct dma_slave_config dma_conf = {
         .dst_addr_width = DMA_SLAVE_BUSWIDTH_4_BYTES,
         .src_addr_width = DMA_SLAVE_BUSWIDTH_4_BYTES,
@@ -471,7 +472,7 @@ int rp1_ws281x_pwm_probe(struct platform_device *pdev) {
     return 0;
 }
 
-int rp1_ws281x_pwm_remove(struct platform_device *pdev) {
+static void rp1_ws281x_pwm_remove(struct platform_device *pdev) {
     rp1_ws281x_pwm_cleanup();
 
     misc_deregister(&rp1_ws281x_pwm.mdev);
@@ -481,8 +482,6 @@ int rp1_ws281x_pwm_remove(struct platform_device *pdev) {
     devm_iounmap(&pdev->dev, rp1_ws281x_pwm.regs);
 
     rp1_ws281x_pwm.pdev = NULL;
-
-    return 0;
 }
 
 static const struct of_device_id rp1_ws281x_pwm_of_match[] = {
